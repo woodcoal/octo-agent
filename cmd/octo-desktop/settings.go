@@ -27,6 +27,9 @@ type desktopSettings struct {
 	// ConnectionMode defaults to local so existing desktop.json files retain the
 	// current embedded-hub behavior.
 	ConnectionMode desktopConnectionMode `json:"connection_mode,omitempty"`
+	// ConnectionConfigured distinguishes a first launch from an explicit local
+	// choice, so the desktop app can ask before starting a local hub.
+	ConnectionConfigured bool `json:"connection_configured,omitempty"`
 	// RemoteURL is the root URL of an Octo service when ConnectionMode is remote.
 	// Access keys are deliberately excluded and stay in the WebView's origin-scoped
 	// storage after the service's normal authentication flow completes.

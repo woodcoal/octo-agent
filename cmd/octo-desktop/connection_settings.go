@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -15,8 +16,9 @@ type desktopConnectionService struct {
 }
 
 type desktopConnectionConfig struct {
-	Mode      string `json:"mode"`
-	RemoteURL string `json:"remote_url"`
+	Mode       string `json:"mode"`
+	RemoteURL  string `json:"remote_url"`
+	Configured bool   `json:"configured"`
 }
 
 // Get returns the current connection preference without exposing credentials.
@@ -24,8 +26,9 @@ func (s *desktopConnectionService) Get() desktopConnectionConfig {
 	s.bridge.settingsMu.Lock()
 	defer s.bridge.settingsMu.Unlock()
 	return desktopConnectionConfig{
-		Mode:      string(s.bridge.settings.ConnectionMode),
-		RemoteURL: s.bridge.settings.RemoteURL,
+		Mode:       string(s.bridge.settings.ConnectionMode),
+		RemoteURL:  s.bridge.settings.RemoteURL,
+		Configured: s.bridge.settings.ConnectionConfigured,
 	}
 }
 
@@ -41,6 +44,8 @@ func (s *desktopConnectionService) Save(mode, remoteURL string) error {
 	settings := s.bridge.settings
 	settings.ConnectionMode = connectionMode
 	settings.RemoteURL = normalizedURL
+	settings.ConnectionConfigured = true
+	s.bridge.settings = settings
 	s.bridge.settingsMu.Unlock()
 	if err := saveDesktopSettings(settings); err != nil {
 		return fmt.Errorf("保存桌面连接设置: %w", err)
@@ -129,8 +134,15 @@ func (b *nativeBridge) connectionSettingsWindow() {
 	if b.app == nil {
 		return
 	}
+	if window, ok := b.app.Window.GetByName("desktop-connection"); ok {
+		window.Show()
+		window.Focus()
+		return
+	}
 	b.app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:      "desktop-connection",
 		Title:     "Octo 桌面连接",
+		Frameless: runtime.GOOS != "darwin",
 		Width:     580,
 		Height:    480,
 		MinWidth:  480,

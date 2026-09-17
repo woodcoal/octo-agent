@@ -76,8 +76,8 @@ func TestDefaultDesktopSettings_NoGeometry(t *testing.T) {
 	if s.WindowWidth != 0 || s.WindowHeight != 0 || s.WindowMaximised {
 		t.Errorf("defaults should carry no saved geometry, got %+v", s)
 	}
-	if s.ConnectionMode != desktopConnectionLocal || s.RemoteURL != "" {
-		t.Errorf("defaults should start locally, got %+v", s)
+	if s.ConnectionMode != desktopConnectionLocal || s.RemoteURL != "" || s.ConnectionConfigured {
+		t.Errorf("defaults should require a connection choice, got %+v", s)
 	}
 }
 
@@ -114,6 +114,37 @@ func TestNormalizedConnection(t *testing.T) {
 				t.Errorf("normalizedConnection(%q, %q) = (%q, %q), want (%q, %q)", tc.mode, tc.remote, gotMode, gotURL, wantMode, tc.wantURL)
 			}
 		})
+	}
+}
+
+// TestDesktopSettingsConnectionRoundTrip verifies that an explicit remote
+// selection survives both disk persistence and a later settings write.
+func TestDesktopSettingsConnectionRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(datahome.ProfileEnv, "")
+
+	settings := defaultDesktopSettings()
+	settings.ConnectionMode = desktopConnectionRemote
+	settings.ConnectionConfigured = true
+	settings.RemoteURL = "https://octo.example.com"
+	if err := saveDesktopSettings(settings); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+
+	loaded := loadDesktopSettings()
+	if loaded.ConnectionMode != desktopConnectionRemote || !loaded.ConnectionConfigured || loaded.RemoteURL != "https://octo.example.com" {
+		t.Fatalf("loaded connection = %+v", loaded)
+	}
+	loaded.WindowWidth = 1600
+	if err := saveDesktopSettings(loaded); err != nil {
+		t.Fatalf("save geometry: %v", err)
+	}
+
+	loaded = loadDesktopSettings()
+	if loaded.ConnectionMode != desktopConnectionRemote || !loaded.ConnectionConfigured || loaded.RemoteURL != "https://octo.example.com" {
+		t.Errorf("connection was overwritten after geometry save: %+v", loaded)
 	}
 }
 

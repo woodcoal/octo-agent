@@ -383,7 +383,9 @@ func main() {
 		// Prompt for notification permission (macOS blocks until answered, so
 		// off the UI thread) — without it every toast silently no-ops.
 		go bridge.requestNotificationAuthorization()
-		if settings.ConnectionMode == desktopConnectionRemote {
+		if !settings.ConnectionConfigured {
+			bridge.connectionSettingsWindow()
+		} else if settings.ConnectionMode == desktopConnectionRemote {
 			bridge.showWindow()
 		} else {
 			startHub(app, bridge, settings)
