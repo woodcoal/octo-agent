@@ -77,6 +77,7 @@ const desktopConnectionPage = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Octo 桌面连接</title>
+<script src="/wails/runtime.js" type="module"></script>
 <style>
 :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
 body { margin: 0; padding: 28px; background: Canvas; color: CanvasText; }
@@ -87,7 +88,9 @@ label { display: block; margin-top: 20px; font-weight: 600; }
 select, input, button { box-sizing: border-box; width: 100%; margin-top: 8px; min-height: 40px; font: inherit; }
 input, select { padding: 8px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 6px; background: Canvas; color: CanvasText; }
 button { margin-top: 24px; border: 0; border-radius: 6px; background: #2563eb; color: white; cursor: pointer; }
+button:disabled { cursor: wait; opacity: .7; }
 #status { min-height: 24px; margin-top: 12px; color: #b91c1c; }
+#status.success { color: #15803d; }
 </style>
 </head>
 <body>
@@ -106,22 +109,46 @@ const mode = document.getElementById('mode');
 const url = document.getElementById('url');
 const save = document.getElementById('save');
 const status = document.getElementById('status');
-const call = (...args) => globalThis.wails.Call.ByName(...args);
+const call = (...args) => globalThis.wails?.Call?.ByName(...args);
 const update = () => { url.disabled = mode.value !== 'remote'; };
+const fail = message => {
+  status.className = '';
+  status.textContent = message;
+  save.disabled = false;
+};
+const ready = async () => {
+  for (let i = 0; i < 50 && !globalThis.wails?.Call?.ByName; i++) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  if (!globalThis.wails?.Call?.ByName) {
+    fail('桌面连接功能未加载，请关闭后重新打开此窗口。');
+    return false;
+  }
+  return true;
+};
 mode.addEventListener('change', update);
-call('main.desktopConnectionService.Get').then(config => {
-  mode.value = config.mode || 'local';
-  url.value = config.remote_url || '';
-  update();
-}).catch(() => { status.textContent = '无法读取桌面连接设置。'; });
+(async () => {
+  if (!await ready()) return;
+  try {
+    const config = await call('main.desktopConnectionService.Get');
+    mode.value = config.mode || 'local';
+    url.value = config.remote_url || '';
+    update();
+  } catch (error) {
+    fail('无法读取桌面连接设置：' + String(error));
+  }
+})();
 save.addEventListener('click', async () => {
+  status.className = '';
   status.textContent = '';
   save.disabled = true;
   try {
+    if (!await ready()) return;
     await call('main.desktopConnectionService.Save', mode.value, url.value);
+    status.className = 'success';
+    status.textContent = '设置已保存，正在重启并连接服务…';
   } catch (error) {
-    status.textContent = String(error);
-    save.disabled = false;
+    fail('保存失败：' + String(error));
   }
 });
 </script>

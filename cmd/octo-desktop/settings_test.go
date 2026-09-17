@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/open-octo/octo-agent/internal/datahome"
@@ -119,6 +120,17 @@ func TestNormalizedConnection(t *testing.T) {
 
 // TestDesktopSettingsConnectionRoundTrip verifies that an explicit remote
 // selection survives both disk persistence and a later settings write.
+// TestDesktopConnectionPageLoadsRuntime ensures the local setup page loads the
+// Wails bridge before attempting to call its native connection service.
+func TestDesktopConnectionPageLoadsRuntime(t *testing.T) {
+	if !strings.Contains(desktopConnectionPage, `src="/wails/runtime.js" type="module"`) {
+		t.Fatal("desktop connection page does not load the Wails runtime")
+	}
+	if !strings.Contains(desktopConnectionPage, `设置已保存，正在重启并连接服务`) {
+		t.Fatal("desktop connection page does not show save success feedback")
+	}
+}
+
 func TestDesktopSettingsConnectionRoundTrip(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
