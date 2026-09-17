@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,6 +130,38 @@ func TestDesktopConnectionPageLoadsRuntime(t *testing.T) {
 	}
 	if !strings.Contains(desktopConnectionPage, `设置已保存，正在重启并连接服务`) {
 		t.Fatal("desktop connection page does not show save success feedback")
+	}
+}
+
+// TestValidateRemoteOctoService accepts only the unauthenticated Octo health
+// response, preventing arbitrary web servers from becoming desktop gateways.
+func TestValidateRemoteOctoService(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		body    string
+		wantErr bool
+	}{
+		{"valid Octo health", http.StatusOK, `{"status":"ok"}`, false},
+		{"wrong health status", http.StatusOK, `{"status":"starting"}`, true},
+		{"wrong response shape", http.StatusOK, `<html>not Octo</html>`, true},
+		{"wrong endpoint status", http.StatusNotFound, `not found`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/health" {
+					t.Fatalf("path = %q, want /api/health", r.URL.Path)
+				}
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			err := validateRemoteOctoService(server.URL)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateRemoteOctoService() error = %v, want error %v", err, tc.wantErr)
+			}
+		})
 	}
 }
 

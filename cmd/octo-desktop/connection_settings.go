@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -32,12 +35,56 @@ func (s *desktopConnectionService) Get() desktopConnectionConfig {
 	}
 }
 
-// Save validates and persists the preference, then replaces the desktop process
-// so the next process starts either the local hub or the selected remote service.
+// ValidateRemote verifies that the configured root is an Octo service before
+// the desktop app persists a remote connection or restarts into it.
+func (s *desktopConnectionService) ValidateRemote(remoteURL string) error {
+	_, normalizedURL, err := normalizedConnection(desktopConnectionRemote, remoteURL)
+	if err != nil {
+		return err
+	}
+	return validateRemoteOctoService(normalizedURL)
+}
+
+// validateRemoteOctoService requires the Octo health endpoint to return its
+// expected unauthenticated response before the URL can be saved.
+func validateRemoteOctoService(remoteURL string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, remoteURL+"/api/health", nil)
+	if err != nil {
+		return fmt.Errorf("创建远程服务校验请求: %w", err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("无法连接远程 Octo 服务: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("远程地址不是可用的 Octo 服务（健康检查返回 %s）", res.Status)
+	}
+
+	var health struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&health); err != nil {
+		return fmt.Errorf("远程地址不是可用的 Octo 服务（健康检查响应无效）")
+	}
+	if health.Status != "ok" {
+		return fmt.Errorf("远程地址不是可用的 Octo 服务（健康检查状态无效）")
+	}
+	return nil
+}
+
 func (s *desktopConnectionService) Save(mode, remoteURL string) error {
 	connectionMode, normalizedURL, err := normalizedConnection(desktopConnectionMode(mode), remoteURL)
 	if err != nil {
 		return err
+	}
+	if connectionMode == desktopConnectionRemote {
+		if err := validateRemoteOctoService(normalizedURL); err != nil {
+			return err
+		}
 	}
 
 	s.bridge.settingsMu.Lock()
@@ -111,6 +158,22 @@ const save = document.getElementById('save');
 const status = document.getElementById('status');
 const call = (...args) => globalThis.wails?.Call?.ByName(...args);
 const update = () => { url.disabled = mode.value !== 'remote'; };
+const validate = async () => {
+  if (mode.value !== 'remote') return true;
+  status.className = '';
+  status.textContent = '正在验证远程 Octo 服务…';
+  save.disabled = true;
+  try {
+    await call('main.desktopConnectionService.ValidateRemote', url.value);
+    status.className = 'success';
+    status.textContent = '远程 Octo 服务验证成功。';
+    save.disabled = false;
+    return true;
+  } catch (error) {
+    fail('远程地址不可用：' + String(error));
+    return false;
+  }
+};
 const fail = message => {
   status.className = '';
   status.textContent = message;
@@ -144,6 +207,10 @@ save.addEventListener('click', async () => {
   save.disabled = true;
   try {
     if (!await ready()) return;
+    if (!await validate()) return;
+    save.disabled = true;
+    status.className = '';
+    status.textContent = '正在保存并重启…';
     await call('main.desktopConnectionService.Save', mode.value, url.value);
     status.className = 'success';
     status.textContent = '设置已保存，正在重启并连接服务…';
