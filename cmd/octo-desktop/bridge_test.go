@@ -33,16 +33,19 @@ func TestShellURL(t *testing.T) {
 
 	tests := []struct {
 		name string
+		base string
 		hash string
 		want string
 	}{
-		{"no hash", "", base + "/?" + query},
-		{"with hash", "settings", base + "/?" + query + "#settings"},
-		{"nested route", "chat/abc123", base + "/?" + query + "#chat/abc123"},
+		{"local no hash", base, "", base + "/?" + query},
+		{"local with hash", base, "settings", base + "/?" + query + "#settings"},
+		{"local nested route", base, "chat/abc123", base + "/?" + query + "#chat/abc123"},
+		{"remote https", "https://octo.example.com", "", "https://octo.example.com/?" + query},
+		{"remote http port", "http://10.0.0.8:8088", "settings", "http://10.0.0.8:8088/?" + query + "#settings"},
 	}
 	for _, tt := range tests {
-		if got := shellURL(base, tt.hash); got != tt.want {
-			t.Errorf("shellURL(%q, %q) = %q, want %q", base, tt.hash, got, tt.want)
+		if got := shellURL(tt.base, tt.hash); got != tt.want {
+			t.Errorf("shellURL(%q, %q) = %q, want %q", tt.base, tt.hash, got, tt.want)
 		}
 	}
 

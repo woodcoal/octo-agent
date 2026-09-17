@@ -1,16 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// isDesktopShell is read at module scope by the heartbeat, so it's mocked per
-// suite: the whole point of the first suite is that a plain browser sends
-// nothing at all (the endpoint only exists in the desktop shell).
-const mocks = vi.hoisted(() => ({ isDesktopShell: false, request: vi.fn() }))
-vi.mock('./stores', () => ({
-  get isDesktopShell() {
-    return mocks.isDesktopShell
-  },
-}))
+// nativeShell only becomes true after the version probe proves this page is a
+// local desktop shell. A remote desktop client must therefore remain silent.
+const mocks = vi.hoisted(() => ({ nativeShell: false, request: vi.fn() }))
+vi.mock('./stores', async () => {
+  const { writable } = await import('svelte/store')
+  return { nativeShell: writable(mocks.nativeShell) }
+})
 vi.mock('./api', () => ({ request: mocks.request }))
 
+import { nativeShell } from './stores'
 import { startNativeHeartbeat } from './nativeHeartbeat'
 
 // The shell contract: frame_age_ms < 0 means no frame has been observed yet,
@@ -61,6 +60,8 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', (id: number) => {
     rafCallbacks.delete(id)
   })
+  mocks.nativeShell = false
+  nativeShell.set(false)
   mocks.request.mockReset()
   mocks.request.mockResolvedValue({ ok: true })
 })
@@ -71,9 +72,9 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('startNativeHeartbeat outside the desktop shell', () => {
+describe('startNativeHeartbeat outside the local desktop shell', () => {
   beforeEach(() => {
-    mocks.isDesktopShell = false
+    nativeShell.set(false)
   })
 
   it('sends no beats and its stop function is safe to call', () => {
@@ -91,9 +92,9 @@ describe('startNativeHeartbeat outside the desktop shell', () => {
   })
 })
 
-describe('startNativeHeartbeat inside the desktop shell', () => {
+describe('startNativeHeartbeat inside the local desktop shell', () => {
   beforeEach(() => {
-    mocks.isDesktopShell = true
+    nativeShell.set(true)
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
   })
 

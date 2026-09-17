@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -191,7 +192,13 @@ func (b *nativeBridge) baseURL() string {
 // frontend reader isDesktopShell in web/src/lib/stores.ts — keep both sides in
 // sync (TestShellURL pins the Go side).
 func shellURL(base, hash string) string {
-	u := base + "/?" + desktopShellQuery
+	u, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	u.Path = "/"
+	query := u.Query()
+	query.Set("shell", "octo-desktop")
 	// The shell webview aligns its titlebar rows to the traffic lights, whose
 	// position depends on the host's macOS version (26pt from the window top
 	// on macOS 26 for this window style, 20px through macOS 15) — and it
@@ -202,13 +209,12 @@ func shellURL(base, hash string) string {
 	// /api/version's os_version once that lands.
 	if runtime.GOOS == "darwin" {
 		if major, _, _ := strings.Cut(server.OSVersion(), "."); major != "" {
-			u += "&macos=" + major
+			query.Set("macos", major)
 		}
 	}
-	if hash != "" {
-		u += "#" + hash
-	}
-	return u
+	u.RawQuery = query.Encode()
+	u.Fragment = hash
+	return u.String()
 }
 
 // rememberWindowGeometry captures the window's size and maximised state into

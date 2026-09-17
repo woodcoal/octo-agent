@@ -74,7 +74,7 @@
       upgradeMode = d.upgrade_mode === 'installer' ? 'installer' : 'cli'
       downloadUrl = d.download_url ?? ''
       selfUpdateAvail = d.self_update === true
-      nativeShell.set(d.native === true && isDesktopShell)
+      nativeShell.set(d.native === true && d.local === true && isDesktopShell)
       localAccess.set(d.local === true)
       macosMajor.set(d.os === 'darwin' ? parseInt(d.os_version, 10) || 0 : 0)
       applyTitlebarLift()

@@ -228,7 +228,11 @@ func main() {
 	ensureBundledOcto(&settings)
 
 	bridge := &nativeBridge{settings: settings}
-	bridge.setURL("http://" + hubAddr.Load().(string))
+	if settings.ConnectionMode == desktopConnectionRemote {
+		bridge.setURL(settings.RemoteURL)
+	} else {
+		bridge.setURL("http://" + hubAddr.Load().(string))
+	}
 	// On Windows/Linux a window close would otherwise quit the app; start with
 	// quit allowed only when the user opted out of keep-running-in-background.
 	bridge.allowQuit.Store(!settings.KeepRunningInBackground)
@@ -237,7 +241,9 @@ func main() {
 	// notificationsAvailable — macOS requires a bundle, Windows/Linux don't).
 	// Registered as a Wails service so its ServiceStartup runs; the bridge holds
 	// it to send notifications the frontend and the tray update check request.
-	var services []application.Service
+	services := []application.Service{
+		application.NewService(&desktopConnectionService{bridge: bridge}),
+	}
 	if notificationsAvailable() {
 		notifier := notifications.New()
 		bridge.notifier = notifier
@@ -248,6 +254,9 @@ func main() {
 		Name:        "Octo",
 		Description: "Octo Agent",
 		Services:    services,
+		Assets: application.AssetOptions{
+			Middleware: desktopConnectionAssets,
+		},
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "dev.octo-agent.desktop",
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
@@ -374,7 +383,11 @@ func main() {
 		// Prompt for notification permission (macOS blocks until answered, so
 		// off the UI thread) — without it every toast silently no-ops.
 		go bridge.requestNotificationAuthorization()
-		startHub(app, bridge, settings)
+		if settings.ConnectionMode == desktopConnectionRemote {
+			bridge.showWindow()
+		} else {
+			startHub(app, bridge, settings)
+		}
 		// Surface a newer release in the tray without the user asking: a delayed
 		// first check, then daily. Foreground-suppressed toasts don't matter here
 		// — the tray item is the durable signal.
@@ -389,10 +402,12 @@ func main() {
 
 	err := app.Run()
 
-	// The app has quit: release our pid-file entry (only if it's still ours —
-	// a successor that took the port over must keep its own) and shut the
-	// server down cleanly.
-	serveproc.ReleaseOwned(os.Getpid())
+	// The app has quit: a local hub releases its pid-file entry (only if it's
+	// still ours — a successor that took the port over must keep its own). A
+	// remote client never owns a local hub and must leave an existing daemon alone.
+	if settings.ConnectionMode == desktopConnectionLocal {
+		serveproc.ReleaseOwned(os.Getpid())
+	}
 	if srv := bridge.srv.Load(); srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = srv.Shutdown(ctx)
@@ -716,6 +731,9 @@ func listenHub(addr string, grace time.Duration) (net.Listener, error) {
 // trayStatusLines is the (info-only) top of the tray menu: what the hub is
 // doing right now — where it's serving and how many clients are attached.
 func trayStatusLines(bridge *nativeBridge) []string {
+	if remote := bridge.connectionLabel(); remote != "" {
+		return []string{fmt.Sprintf(L().trayBackendFmt, remote)}
+	}
 	srv := bridge.srv.Load()
 	if srv == nil {
 		return []string{L().trayStarting}
@@ -782,6 +800,7 @@ func buildTrayMenu(app *application.App, bridge *nativeBridge) *application.Menu
 	}
 	m.Add(petLabel).OnClick(func(*application.Context) { bridge.togglePet() })
 	m.Add(L().traySettings).OnClick(func(*application.Context) { bridge.openSettings() })
+	m.Add("桌面连接…").OnClick(func(*application.Context) { bridge.connectionSettingsWindow() })
 	addProfileMenu(m, bridge)
 	// A known-newer release replaces the "check" item with a one-click update
 	// (in-place when this build supports it, else the download page) — the

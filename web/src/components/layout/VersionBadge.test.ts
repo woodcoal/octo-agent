@@ -12,6 +12,7 @@ import VersionBadge from './VersionBadge.svelte'
 import * as api from '../../lib/api'
 import { ws } from '../../lib/ws'
 import { setLocale } from '../../lib/i18n'
+import { nativeShell } from '../../lib/stores'
 
 let target: HTMLElement
 let app: Record<string, unknown> | null = null
@@ -43,6 +44,7 @@ async function render(over: Record<string, unknown> = {}) {
 const pop = () => target.querySelector('.vb-pop')
 
 beforeEach(() => {
+  nativeShell.set(false)
   setLocale('en')
   wsHandlers = {}
   vi.spyOn(ws, 'on').mockImplementation(((type: string, fn: (ev: unknown) => void) => {
@@ -58,6 +60,13 @@ afterEach(() => {
   app = null
   target.remove()
   vi.restoreAllMocks()
+})
+
+describe('VersionBadge native shell boundary', () => {
+  it('does not enable native behavior for a remote desktop client', async () => {
+    await render({ native: true, local: false })
+    expect((await import('svelte/store')).get(nativeShell)).toBe(false)
+  })
 })
 
 describe('VersionBadge re-check', () => {

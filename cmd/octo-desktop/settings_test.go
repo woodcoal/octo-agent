@@ -76,6 +76,45 @@ func TestDefaultDesktopSettings_NoGeometry(t *testing.T) {
 	if s.WindowWidth != 0 || s.WindowHeight != 0 || s.WindowMaximised {
 		t.Errorf("defaults should carry no saved geometry, got %+v", s)
 	}
+	if s.ConnectionMode != desktopConnectionLocal || s.RemoteURL != "" {
+		t.Errorf("defaults should start locally, got %+v", s)
+	}
+}
+
+// TestNormalizedConnection restricts remote desktop targets to an Octo service
+// origin because the web client resolves its API and WebSocket paths from root.
+func TestNormalizedConnection(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mode    desktopConnectionMode
+		remote  string
+		wantURL string
+		wantErr bool
+	}{
+		{"old settings default local", "", "", "", false},
+		{"local ignores address", desktopConnectionLocal, "https://octo.example.com", "", false},
+		{"https remote", desktopConnectionRemote, "https://octo.example.com/", "https://octo.example.com", false},
+		{"http remote", desktopConnectionRemote, "http://10.0.0.8:8088", "http://10.0.0.8:8088", false},
+		{"missing remote address", desktopConnectionRemote, "", "", true},
+		{"unsupported scheme", desktopConnectionRemote, "ws://octo.example.com", "", true},
+		{"path is rejected", desktopConnectionRemote, "https://octo.example.com/octo", "", true},
+		{"query is rejected", desktopConnectionRemote, "https://octo.example.com?key=x", "", true},
+		{"unknown mode", desktopConnectionMode("other"), "", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gotMode, gotURL, err := normalizedConnection(tc.mode, tc.remote)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("normalizedConnection(%q, %q) error = %v, want error %v", tc.mode, tc.remote, err, tc.wantErr)
+			}
+			wantMode := tc.mode
+			if wantMode == "" {
+				wantMode = desktopConnectionLocal
+			}
+			if !tc.wantErr && (gotMode != wantMode || gotURL != tc.wantURL) {
+				t.Errorf("normalizedConnection(%q, %q) = (%q, %q), want (%q, %q)", tc.mode, tc.remote, gotMode, gotURL, wantMode, tc.wantURL)
+			}
+		})
+	}
 }
 
 func TestDesktopSettingsPathUsesProfileDataHome(t *testing.T) {
