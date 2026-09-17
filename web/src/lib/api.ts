@@ -71,6 +71,12 @@ export async function grantArtifactOrigin(sessionId: string, path: string): Prom
   })
 }
 
+// Desktop-native connection selection
+
+export async function openConnectionSettings(): Promise<void> {
+  await request<unknown>('/api/native/connection-settings', { method: 'POST' })
+}
+
 // Sessions
 
 export interface SessionsResponse {

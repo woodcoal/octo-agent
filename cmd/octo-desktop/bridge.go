@@ -522,6 +522,10 @@ func (b *nativeBridge) showWindow() { b.showWindowAt("") }
 // "Settings"). The frontend maps the "settings" hash route to the modal.
 func (b *nativeBridge) openSettings() { b.showWindowAt("settings") }
 
+// OpenConnectionSettings opens the desktop-local selector requested by the
+// local first-run UI without changing the current service until it is saved.
+func (b *nativeBridge) OpenConnectionSettings() { b.connectionSettingsWindow() }
+
 // openNewSession brings the window up and starts a new session (tray
 // "New Session" / a keyboard-⌘N-equivalent from the shell side). The frontend
 // maps the "new" hash route to createNewSession(), the same action the in-app

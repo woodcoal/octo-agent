@@ -15,33 +15,34 @@ import (
 
 // fakeNative records what it was asked and returns canned results.
 type fakeNative struct {
-	gotStartDir        string
-	retPath            string
-	retCancel          bool
-	gotTitle, gotBody  string
-	notifyCalls        int
-	gotSessionID       string
-	notifySessionCalls int
-	autostart          bool
-	toggleMaxCalls     int
-	minimiseCalls      int
-	closeCalls         int
-	maximised          bool
-	gotOpenURL         string
-	openCalls          int
-	gotOpenDir         string
-	openDirCalls       int
-	gotSaveName        string
-	gotSaveContent     string
-	saveCalls          int
-	canSelfUpdate      bool
-	selfUpdateCalls    int
-	selfUpdateErr      error
-	printCalls         int
-	printErr           error
-	heartbeatCalls     int
-	gotFrameAgeMS      int64
-	gotHidden          bool
+	gotStartDir             string
+	retPath                 string
+	retCancel               bool
+	gotTitle, gotBody       string
+	notifyCalls             int
+	gotSessionID            string
+	notifySessionCalls      int
+	autostart               bool
+	toggleMaxCalls          int
+	minimiseCalls           int
+	closeCalls              int
+	connectionSettingsCalls int
+	maximised               bool
+	gotOpenURL              string
+	openCalls               int
+	gotOpenDir              string
+	openDirCalls            int
+	gotSaveName             string
+	gotSaveContent          string
+	saveCalls               int
+	canSelfUpdate           bool
+	selfUpdateCalls         int
+	selfUpdateErr           error
+	printCalls              int
+	printErr                error
+	heartbeatCalls          int
+	gotFrameAgeMS           int64
+	gotHidden               bool
 }
 
 func (f *fakeNative) PickFolder(_ context.Context, startDir string) (string, bool, error) {
@@ -66,6 +67,7 @@ func (f *fakeNative) SetAutostart(enable bool) error  { f.autostart = enable; re
 func (f *fakeNative) ToggleMaximise()                 { f.toggleMaxCalls++ }
 func (f *fakeNative) Minimise()                       { f.minimiseCalls++ }
 func (f *fakeNative) Close()                          { f.closeCalls++ }
+func (f *fakeNative) OpenConnectionSettings()         { f.connectionSettingsCalls++ }
 func (f *fakeNative) WindowState() bool               { return f.maximised }
 func (f *fakeNative) OpenExternal(url string) error {
 	f.openCalls++
@@ -249,6 +251,22 @@ func TestNativeAutostartRoundTrip(t *testing.T) {
 	}
 	if !getEnabled() {
 		t.Errorf("autostart should be enabled after PUT true")
+	}
+}
+
+func TestNativeConnectionSettings(t *testing.T) {
+	fake := &fakeNative{}
+	s := &Server{cfg: Config{Native: fake}}
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/native/connection-settings", nil)
+	req.RemoteAddr = "127.0.0.1:9000"
+	rr := httptest.NewRecorder()
+
+	s.handleNativeConnectionSettings(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if fake.connectionSettingsCalls != 1 {
+		t.Errorf("OpenConnectionSettings calls = %d, want 1", fake.connectionSettingsCalls)
 	}
 }
 

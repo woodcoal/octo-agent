@@ -323,6 +323,22 @@ func (s *Server) handleNativeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// POST /api/native/connection-settings — open the desktop-local connection
+// selector without changing the current local service until a new choice saves.
+func (s *Server) handleNativeConnectionSettings(w http.ResponseWriter, r *http.Request) {
+	if !isLocalRequest(r) {
+		writeError(w, http.StatusForbidden, "available only from the local machine")
+		return
+	}
+	bridge, ok := s.cfg.Native.(interface{ OpenConnectionSettings() })
+	if !ok {
+		writeError(w, http.StatusNotFound, "desktop connection selector not available")
+		return
+	}
+	bridge.OpenConnectionSettings()
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // POST /api/native/window/close — close the desktop window. The app's ShouldQuit
 // decides whether the hub actually terminates or keeps running in the tray.
 // Desktop only, loopback-gated.

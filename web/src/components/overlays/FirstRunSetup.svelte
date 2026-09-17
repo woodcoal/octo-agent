@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { t, tr, locale, setLocale } from '../../lib/i18n'
-  import { onboardPhase, openAgentSession, showToast } from '../../lib/stores'
+  import { onboardPhase, openAgentSession, showToast, isDesktopShell } from '../../lib/stores'
   import * as api from '../../lib/api'
   import type { ProviderPreset, ModelConfigInput, ModelEntry } from '../../lib/api'
   import ModelConfigForm from '../settings/ModelConfigForm.svelte'
@@ -73,8 +73,16 @@
   // finishOnboard runs after the browser step (set up or skipped): mark
   // onboarding complete and hand off to the personalisation chat. The gate falls
   // through to the normal UI, where ChatView auto-sends the queued /onboard.
+  async function openDesktopConnectionSettings() {
+    try {
+      await api.openConnectionSettings()
+    } catch {
+      showToast('无法打开桌面连接选择。', 'error')
+    }
+  }
+
   async function finishOnboard() {
-    // Persist the language choice so a refresh lands on it.
+	// Persist the language choice so a refresh lands on it.
     await api.updateLanguage(lang).catch(() => {})
     await api.completeOnboard()
     // This IS the first-run auto-launch of /onboard, so record the one-shot
@@ -104,6 +112,10 @@
       <span class="step-sep"></span>
       <span class="ostep" class:on={step === 'browser'}>3 · {$t('onboard.step.browser')}</span>
     </div>
+
+    {#if isDesktopShell}
+      <button class="connection-link" onclick={openDesktopConnectionSettings}>返回本机 / 远程服务选择</button>
+    {/if}
 
     {#if step === 'lang'}
       <p class="prompt">{$t('onboard.lang.prompt')}</p>
@@ -164,6 +176,8 @@
 }
 .brand-text h1 { margin: 0; font-size: 20px; font-weight: 600; color: var(--text-heading); }
 .brand-text p { margin: 2px 0 0; font-size: 13px; color: var(--text-secondary); }
+.connection-link { align-self: flex-start; border: none; background: transparent; padding: 0; color: var(--blue-6); font: inherit; font-size: 13px; cursor: pointer; }
+.connection-link:hover { text-decoration: underline; }
 .steps { display: flex; align-items: center; gap: 10px; }
 .ostep {
   font-size: 12px; color: var(--text-secondary); padding: 3px 11px;
